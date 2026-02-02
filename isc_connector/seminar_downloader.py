@@ -108,6 +108,6 @@ class SeminarDownloader:
         sheets = len(openpyxl.load_workbook(filename=self._bytes).sheetnames)
 
         return [
-            pd.read_excel(self._bytes, sheet_name=i, engine='openpyxl', converters={'Plz': str})
+            pd.read_excel(self._bytes, sheet_name=i, engine='openpyxl', converters={'Plz': str}, skiprows=6)
             for i in range(sheets)
         ]
