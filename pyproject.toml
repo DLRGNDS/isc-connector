@@ -1,6 +1,6 @@
 [project]
 name = "isc-connector"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = [
     {name = "Tjark Saul",email = "pypi@appfel.dev"}
