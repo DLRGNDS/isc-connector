@@ -1,14 +1,27 @@
 import io
+import logging
 from typing import Optional
 
 import openpyxl
 import pandas as pd
 import requests
-import logging
 
 from .errors import SeminarDownloaderHttpError
 
 logger = logging.getLogger(__name__)
+
+
+def get_first_row(workbook):
+    sheet = workbook.active
+
+    for row in range(1, sheet.max_row + 1):
+        for col in range(1, sheet.max_column + 1):
+            cell_value = sheet.cell(row=row, column=col).value
+            if cell_value is not None and isinstance(cell_value, str) and cell_value.strip() == "Nr":
+                return row
+
+    # We couldn't find the header row, so we return 1 to get the full sheet
+    return 1
 
 
 class SeminarDownloader:
@@ -23,7 +36,15 @@ class SeminarDownloader:
                  seminar_id: int,
                  username: str,
                  password: str,
-                 user_agent: str) -> None:
+                 user_agent: str,
+                 include_non_participant_roles: bool = False,
+                 include_non_standard_roles: list | None = None,
+                 ) -> None:
+        if include_non_standard_roles is None:
+            self.include_non_standard_roles = []
+        else:
+            self.include_non_standard_roles = include_non_standard_roles
+        self.include_non_participant_roles = include_non_participant_roles
         self._bytes = None
         self.username = username
         self.password = password
@@ -74,7 +95,14 @@ class SeminarDownloader:
                 "dokumentListeTyp": "xls",
                 "dokumentListeRolleList[]": [
                     "1",
-                ],
+                ] + ([
+                     "2",  # Leiter
+                     "3",  # Referent
+                     "4",  # Hospitant
+                     "5",  # Gast
+                     "6",  # OrgaTeam
+                 ] if self.include_non_participant_roles else []
+                ) + self.include_non_standard_roles,
                 "dokumentListeStatusList[]": ["0"],
                 "dokumentListeSortierung": "anmeldenummer",
                 "dokumentListeTnstatusBestaetigtDurchTeilnehmer": "",
@@ -82,6 +110,7 @@ class SeminarDownloader:
                 "dokumentListeTnstatusBestaetigtDurchGliederung": "",
                 "dokumentListeTnstatusTeilgenommen": "",
                 "dokumentListeTnstatusBestanden": "",
+                "dokumentListeShowAllgemeineLehrgangInfos": "0",
             },
         )
 
@@ -93,22 +122,24 @@ class SeminarDownloader:
             logger.warning(f'Excel download failed with status code {result.status_code}')
             raise SeminarDownloaderHttpError(f'Excel download failed with status code {result.status_code}')
 
-
         return io.BytesIO(result.content)
 
-    def get_data(self, *, write_file: Optional[str]=None) -> list[pd.DataFrame]:
+    def get_data(self, *, write_file: Optional[str] = None) -> list[pd.DataFrame]:
         self._bytes = self._get_file()
 
         if write_file is not None:
             with open(
-                f"{write_file}.xlsx", "wb"
+                    f"{write_file}.xlsx", "wb"
             ) as file:
                 file.write(self._bytes.getbuffer())
 
-        sheets = len(openpyxl.load_workbook(filename=self._bytes).sheetnames)
+        workbook = openpyxl.load_workbook(filename=self._bytes)
+        row = get_first_row(workbook)
+
+        sheets = len(workbook.sheetnames)
 
         return [
-            pd.read_excel(self._bytes, sheet_name=0, engine='openpyxl', converters={'Plz': str}, skiprows=6)
+            pd.read_excel(self._bytes, sheet_name=0, engine='openpyxl', converters={'Plz': str}, skiprows=row - 1)
         ] + [
             pd.read_excel(self._bytes, sheet_name=i, engine='openpyxl', converters={'Plz': str})
             for i in range(1, sheets)
