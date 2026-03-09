@@ -6,7 +6,7 @@ import openpyxl
 import pandas as pd
 import requests
 
-from .errors import SeminarDownloaderHttpError
+from .errors import SeminarDownloaderHttpError, SeminarDownloaderInvalidOrgId
 
 logger = logging.getLogger(__name__)
 
@@ -39,15 +39,21 @@ class SeminarDownloader:
                  user_agent: str,
                  include_non_participant_roles: bool = False,
                  include_non_standard_roles: list | None = None,
+                 include_canceled: bool = True,
+                 include_waiting_list: bool = False,
                  ) -> None:
         if include_non_standard_roles is None:
             self.include_non_standard_roles = []
         else:
             self.include_non_standard_roles = include_non_standard_roles
         self.include_non_participant_roles = include_non_participant_roles
+        self.include_canceled = include_canceled
+        self.include_waiting_list = include_waiting_list
         self._bytes = None
         self.username = username
         self.password = password
+        if len(gliederung_id) != 7:
+            raise SeminarDownloaderInvalidOrgId('Gliederungs-ID must be 7 characters long')
         self.gliederung_id = gliederung_id
         self.seminar_id = seminar_id
         self.headers = {
@@ -103,7 +109,10 @@ class SeminarDownloader:
                      "6",  # OrgaTeam
                  ] if self.include_non_participant_roles else []
                 ) + self.include_non_standard_roles,
-                "dokumentListeStatusList[]": ["0"],
+                "dokumentListeStatusList[]": [
+                    "0"
+                ] + (["3"] if self.include_canceled else [])
+                + (["4"] if self.include_waiting_list else []),
                 "dokumentListeSortierung": "anmeldenummer",
                 "dokumentListeTnstatusBestaetigtDurchTeilnehmer": "",
                 "dokumentListeTnstatusBestaetigtDurchVerwalter": "",

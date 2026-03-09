@@ -18,3 +18,6 @@ class SeminarDownloaderNotFound(SeminarDownloaderHttpError):
     def __init__(self, *args, **kwargs):
         self.status_code = 404
         super().__init__(args, kwargs)
+
+class SeminarDownloaderInvalidOrgId(SeminarDownloaderError):
+    pass
